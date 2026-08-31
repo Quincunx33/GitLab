@@ -1,0 +1,6 @@
+{
+  "name": "GitLab",
+  "description": "A modern GitLab web client with repository management, real-time file viewing, editing, commit tracking, and code reviews.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
