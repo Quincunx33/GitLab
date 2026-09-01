@@ -32,7 +32,7 @@
 ## 🎨 Features At A Glance
 
 <div align="center">
-  <img src="./src/assets/images/pushflow_mockup_1788223271730.jpg" alt="PushFlow App Mockup" width="100%" style="border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+  <img src="./src/assets/images/pushflow_app_mockup_1788286085998.jpg" alt="PushFlow App Mockup" width="100%" style="border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
 </div>
 
 <br />
@@ -103,5 +103,5 @@ This codebase is **100% safe to be open-sourced and published publicly**.
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by the PushFlow Team.</sub>
+  <sub>Handcrafted by Tasfia</sub>
 </div>

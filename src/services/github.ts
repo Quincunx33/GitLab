@@ -41,7 +41,42 @@ export function parseRepoUrl(input: string): { owner: string; repo: string } | n
   return null;
 }
 
-export async function fetchGitHubRepoTree(
+
+const apiCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCached<T>(key: string): T | null {
+  const item = apiCache.get(key);
+  if (item && Date.now() - item.timestamp < CACHE_TTL) {
+    return item.data as T;
+  }
+  return null;
+}
+
+function setCached(key: string, data: any) {
+  apiCache.set(key, { data, timestamp: Date.now() });
+}
+
+export function clearGitHubCacheForRepo(owner: string, repo: string) {
+  const prefix = `${owner}/${repo}`;
+  for (const key of apiCache.keys()) {
+    if (key.includes(prefix) || key.includes('user_repos')) {
+      apiCache.delete(key);
+    }
+  }
+}
+
+
+export async function fetchGitHubRepoTree(owner: string, repo: string, branch: string = 'main', token?: string | null): Promise<GitHubTreeItem[]> {
+  const cacheKey = `tree_${owner}_${repo}_${branch}`;
+  const cached = getCached<GitHubTreeItem[]>(cacheKey);
+  if (cached) return cached;
+  const result = await _fetchGitHubRepoTree(owner, repo, branch, token);
+  setCached(cacheKey, result);
+  return result;
+}
+
+async function _fetchGitHubRepoTree(
   owner: string,
   repo: string,
   branch: string = 'main',
@@ -79,7 +114,16 @@ export async function fetchGitHubRepoTree(
   return data.tree || [];
 }
 
-export async function fetchFileContent(
+export async function fetchFileContent(owner: string, repo: string, path: string, branch: string = 'main', token?: string | null): Promise<string> {
+  const cacheKey = `file_${owner}_${repo}_${path}_${branch}`;
+  const cached = getCached<string>(cacheKey);
+  if (cached) return cached;
+  const result = await _fetchFileContent(owner, repo, path, branch, token);
+  setCached(cacheKey, result);
+  return result;
+}
+
+async function _fetchFileContent(
   owner: string,
   repo: string,
   path: string,
@@ -117,7 +161,16 @@ export async function fetchFileContent(
   return '';
 }
 
-export async function fetchBranches(
+export async function fetchBranches(owner: string, repo: string, token?: string | null): Promise<string[]> {
+  const cacheKey = `branches_${owner}_${repo}`;
+  const cached = getCached<string[]>(cacheKey);
+  if (cached) return cached;
+  const result = await _fetchBranches(owner, repo, token);
+  setCached(cacheKey, result);
+  return result;
+}
+
+async function _fetchBranches(
   owner: string,
   repo: string,
   token?: string | null
@@ -382,7 +435,7 @@ export async function commitMultipleFilesToGitHub(
 
     if (!updateRefRes.ok) {
       const err = await updateRefRes.json().catch(() => ({}));
-      throw parseGitHubError(refRes.status, err.message, `Failed to update branch ${branch} ref`);
+      throw parseGitHubError(updateRefRes.status, err.message, `Failed to update branch ${branch} ref`);
     }
   } else {
     // Create new ref
@@ -472,7 +525,16 @@ export async function commitAndPushFile(
   }
 }
 
-export async function fetchCommitHistory(
+export async function fetchCommitHistory(owner: string, repo: string, branch: string = 'main', token?: string | null): Promise<CommitInfo[]> {
+  const cacheKey = `history_${owner}_${repo}_${branch}`;
+  const cached = getCached<CommitInfo[]>(cacheKey);
+  if (cached) return cached;
+  const result = await _fetchCommitHistory(owner, repo, branch, token);
+  setCached(cacheKey, result);
+  return result;
+}
+
+async function _fetchCommitHistory(
   owner: string,
   repo: string,
   branch: string = 'main',
@@ -509,6 +571,15 @@ export async function fetchCommitHistory(
 }
 
 export async function fetchUserRepositories(token: string): Promise<GitHubRepoItem[]> {
+  const cacheKey = `user_repos_${token}`;
+  const cached = getCached<GitHubRepoItem[]>(cacheKey);
+  if (cached) return cached;
+  const result = await _fetchUserRepositories(token);
+  setCached(cacheKey, result);
+  return result;
+}
+
+async function _fetchUserRepositories(token: string): Promise<GitHubRepoItem[]> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github.v3+json',
     Authorization: `Bearer ${token}`,
@@ -529,6 +600,15 @@ export async function fetchUserRepositories(token: string): Promise<GitHubRepoIt
 }
 
 export async function fetchPublicUserRepos(username: string): Promise<GitHubRepoItem[]> {
+  const cacheKey = `public_repos_${username}`;
+  const cached = getCached<GitHubRepoItem[]>(cacheKey);
+  if (cached) return cached;
+  const result = await _fetchPublicUserRepos(username);
+  setCached(cacheKey, result);
+  return result;
+}
+
+async function _fetchPublicUserRepos(username: string): Promise<GitHubRepoItem[]> {
   const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=100`, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
@@ -604,5 +684,7 @@ export async function revertRepositoryToCommit(
     throw new Error('Failed to update branch reference to revert commit.');
   }
 
+  clearGitHubCacheForRepo(owner, repo);
+  clearGitHubCacheForRepo(owner, repo);
   return { newCommitSha };
 }

@@ -315,7 +315,7 @@ export const App: React.FC = () => {
         path,
         content,
         isModified: false,
-        language: getLanguageFromFilename(name),
+        language: getLanguageFromFilename(name, content),
         sha,
       };
       return [...prevTabs, newTab];
@@ -459,7 +459,7 @@ export const App: React.FC = () => {
       path,
       content: '// New File\n',
       isModified: true,
-      language: getLanguageFromFilename(fileName),
+      language: getLanguageFromFilename(fileName, '// New File'),
     };
 
     // Add to file tree
@@ -700,7 +700,7 @@ export const App: React.FC = () => {
             path: candidate.path,
             content,
             isModified: false,
-            language: getLanguageFromFilename(candidate.name),
+            language: getLanguageFromFilename(candidate.name, content),
           });
         }
 
@@ -1702,7 +1702,7 @@ export const App: React.FC = () => {
               id: newPath,
               path: newPath,
               title: cleanName,
-              language: getLanguageFromFilename(cleanName),
+              language: getLanguageFromFilename(cleanName, t.content),
             };
           } else if (t.path.startsWith(targetPath + '/')) {
             const subRel = t.path.slice(targetPath.length);
