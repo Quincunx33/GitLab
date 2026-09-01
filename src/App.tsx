@@ -95,6 +95,7 @@ export const App: React.FC = () => {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [showCreateRepoModal, setShowCreateRepoModal] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
+  const [showCommitPromptModal, setShowCommitPromptModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -110,17 +111,37 @@ export const App: React.FC = () => {
     }, 4000);
   }, []);
 
+  // Global Error Listeners for Uncaught Promises and Errors
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled Promise Rejection:', event.reason);
+      const msg = event.reason?.message || (typeof event.reason === 'string' ? event.reason : 'An unexpected error occurred in a background task.');
+      showToast(msg, 'error');
+    };
+
+    const handleError = (event: ErrorEvent) => {
+      console.error('Uncaught Error:', event.error);
+      const msg = event.error?.message || event.message || 'An unexpected application error occurred.';
+      showToast(msg, 'error');
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', handleError);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleError);
+    };
+  }, [showToast]);
+
   // Initialize Firebase connection & Auth state listener
   useEffect(() => {
     testFirebaseConnection();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      if (user && !githubUser) {
-        setGithubUser(user.displayName || user.email || 'User');
-      }
     });
     return () => unsubscribe();
-  }, [githubUser]);
+  }, []);
 
   // Load User Repositories from GitHub
   const loadUserRepositories = useCallback(
@@ -170,7 +191,6 @@ export const App: React.FC = () => {
       fetchGitHubUser(githubToken)
         .then((username) => {
           setGithubUser(username);
-          loadUserRepositories(githubToken, username, false);
         })
         .catch(() => {
           localStorage.removeItem('github_pat');
@@ -225,7 +245,7 @@ export const App: React.FC = () => {
       setIsLoading(true);
       setLoadingMessage('Signing in with GitHub OAuth...');
       const { user, githubAccessToken } = await signInWithGitHubOAuth();
-      const resolvedUsername = user.displayName || user.email || 'User';
+      const resolvedUsername = (user as any).reloadUserInfo?.screenName || user.displayName || user.email || 'User';
 
       if (githubAccessToken) {
         localStorage.setItem('github_pat', githubAccessToken);
@@ -251,6 +271,7 @@ export const App: React.FC = () => {
   const handleLogoutFirebase = async () => {
     try {
       await logoutUser();
+      handleClearGitHubToken();
       showToast('Logged out of Firebase', 'info');
     } catch (err: any) {
       showToast(err.message || 'Logout failed', 'error');
@@ -1807,6 +1828,12 @@ export const App: React.FC = () => {
       return;
     }
 
+    // Always ask for commit message before pushing
+    setShowCommitPromptModal(true);
+  };
+
+  const confirmCommitPush = async () => {
+    setShowCommitPromptModal(false);
     setIsLoading(true);
     setLoadingMessage(`Preparing all project files for GitHub commit...`);
 
@@ -2061,6 +2088,51 @@ export const App: React.FC = () => {
       />
 
       {/* Modals & Notifications */}
+      {showCommitPromptModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-[#1e1e1e] border border-[#333] rounded-lg shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-[#333]">
+              <h3 className="text-white font-medium flex items-center gap-2">
+                <i className="fas fa-upload text-blue-400"></i> Commit & Push
+              </h3>
+              <button onClick={() => setShowCommitPromptModal(false)} className="text-[#888] hover:text-white text-base">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#888] mb-1">Commit Message</label>
+                <input
+                  type="text"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  placeholder="e.g. Update project files (optional)"
+                  className="w-full bg-[#111] border border-[#333] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmCommitPush();
+                  }}
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#333] flex justify-end gap-2 bg-[#161616]">
+              <button
+                onClick={() => setShowCommitPromptModal(false)}
+                className="px-4 py-2 text-sm text-[#ccc] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCommitPush}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors flex items-center gap-2"
+              >
+                <i className="fas fa-upload"></i> Commit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Modals
         showGitHubModal={showGitHubModal}
         onCloseGitHubModal={() => setShowGitHubModal(false)}

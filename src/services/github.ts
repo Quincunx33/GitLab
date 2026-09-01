@@ -10,6 +10,25 @@ export interface GitHubTreeItem {
   url?: string;
 }
 
+export function parseGitHubError(status: number, message: string, defaultMessage: string): Error {
+  if (status === 401) {
+    return new Error('GitHub Token is invalid or expired. Please sign in again.');
+  }
+  if (status === 403 || message.toLowerCase().includes('rate limit')) {
+    return new Error('GitHub API rate limit exceeded. Please wait a moment or sign in to increase your limit.');
+  }
+  if (status === 404) {
+    return new Error('Repository or resource not found. It might be private or deleted.');
+  }
+  if (status === 409) {
+    return new Error('Conflict occurred. The repository might be empty or out of sync.');
+  }
+  if (status === 422) {
+    return new Error(`Validation failed: ${message}`);
+  }
+  return new Error(message || defaultMessage);
+}
+
 export function parseRepoUrl(input: string): { owner: string; repo: string } | null {
   let cleaned = input.trim();
   cleaned = cleaned.replace(/^https?:\/\/github\.com\//, '');
@@ -53,7 +72,7 @@ export async function fetchGitHubRepoTree(
       }
     }
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.message || `Failed to fetch repo tree (${res.status})`);
+    throw parseGitHubError(res.status, errData.message, `Failed to fetch repo tree (${res.status})`);
   }
 
   const data = await res.json();
@@ -80,7 +99,8 @@ export async function fetchFileContent(
   );
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch file content for ${path}`);
+    const errData = await res.json().catch(() => ({}));
+    throw parseGitHubError(res.status, errData.message, `Failed to fetch file content for ${path}`);
   }
 
   const data = await res.json();
@@ -125,7 +145,8 @@ export async function fetchGitHubUser(token: string): Promise<string> {
   });
 
   if (!res.ok) {
-    throw new Error('Invalid GitHub token');
+    const errData = await res.json().catch(() => ({}));
+    throw parseGitHubError(res.status, errData.message, 'Invalid GitHub token');
   }
 
   const data = await res.json();
@@ -155,7 +176,7 @@ export async function createGitHubRepository(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Failed to create repository (${res.status})`);
+    throw parseGitHubError(res.status, err.message, `Failed to create repository (${res.status})`);
   }
 
   const data = await res.json();
@@ -317,7 +338,7 @@ export async function commitMultipleFilesToGitHub(
 
   if (!treeRes.ok) {
     const err = await treeRes.json().catch(() => ({}));
-    throw new Error(err.message || `Failed to create Git tree (${treeRes.status})`);
+    throw parseGitHubError(treeRes.status, err.message, `Failed to create Git tree (${treeRes.status})`);
   }
 
   const treeData = await treeRes.json();
@@ -339,7 +360,7 @@ export async function commitMultipleFilesToGitHub(
 
   if (!commitRes.ok) {
     const err = await commitRes.json().catch(() => ({}));
-    throw new Error(err.message || `Failed to create Git commit (${commitRes.status})`);
+    throw parseGitHubError(commitRes.status, err.message, `Failed to create Git commit (${commitRes.status})`);
   }
 
   const commitData = await commitRes.json();
@@ -361,7 +382,7 @@ export async function commitMultipleFilesToGitHub(
 
     if (!updateRefRes.ok) {
       const err = await updateRefRes.json().catch(() => ({}));
-      throw new Error(err.message || `Failed to update branch ${branch} ref`);
+      throw parseGitHubError(refRes.status, err.message, `Failed to update branch ${branch} ref`);
     }
   } else {
     // Create new ref
@@ -376,7 +397,7 @@ export async function commitMultipleFilesToGitHub(
 
     if (!createRefRes.ok) {
       const err = await createRefRes.json().catch(() => ({}));
-      throw new Error(err.message || `Failed to create branch ${branch} ref`);
+      throw parseGitHubError(createRefRes.status, err.message, `Failed to create branch ${branch} ref`);
     }
   }
 
@@ -447,7 +468,7 @@ export async function commitAndPushFile(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Failed to commit file ${path}`);
+    throw parseGitHubError(res.status, err.message, `Failed to commit file ${path}`);
   }
 }
 
@@ -471,7 +492,7 @@ export async function fetchCommitHistory(
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.message || `Failed to fetch commit history (${res.status})`);
+    throw parseGitHubError(res.status, errData.message, `Failed to fetch commit history (${res.status})`);
   }
 
   const data = await res.json();
@@ -500,7 +521,7 @@ export async function fetchUserRepositories(token: string): Promise<GitHubRepoIt
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.message || `Failed to fetch repositories (${res.status})`);
+    throw parseGitHubError(res.status, errData.message, `Failed to fetch repositories (${res.status})`);
   }
 
   const data = await res.json();
@@ -516,7 +537,7 @@ export async function fetchPublicUserRepos(username: string): Promise<GitHubRepo
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.message || `Failed to fetch public repositories (${res.status})`);
+    throw parseGitHubError(res.status, errData.message, `Failed to fetch public repositories (${res.status})`);
   }
 
   const data = await res.json();

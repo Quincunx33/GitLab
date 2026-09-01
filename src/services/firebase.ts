@@ -36,7 +36,8 @@ export async function signInWithGitHubOAuth(): Promise<{ user: User; githubAcces
     const githubAccessToken = credential?.accessToken || null;
 
     if (result.user) {
-      await saveUserProfile(result.user, result.user.displayName || 'GitHub User');
+      const screenName = (result.user as any).reloadUserInfo?.screenName || result.user.displayName || 'GitHub User';
+      await saveUserProfile(result.user, screenName);
     }
 
     return { user: result.user, githubAccessToken };
