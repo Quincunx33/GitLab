@@ -8,6 +8,10 @@
     <meta name="description" content="PushFlow is a modern, fully-featured GitHub and GitLab web client. Manage repositories, edit code in real-time, stage commits, and track history seamlessly." />
     <meta name="keywords" content="PushFlow, GitHub client, GitLab client, web code editor, git client online, monaco editor, repository management, version control" />
     <meta name="author" content="PushFlow" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="canonical" href="https://pushflow.pages.dev/" />
     
     <!-- Open Graph / Facebook -->
@@ -35,22 +39,46 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "PushFlow",
-      "description": "PushFlow is a modern, fully-featured GitHub and GitLab web client. Manage repositories, edit code in real-time, stage commits, and track history seamlessly.",
-      "applicationCategory": "DeveloperApplication",
-      "operatingSystem": "Web",
-      "url": "https://pushflow.pages.dev/",
-      "image": "https://pushflow.pages.dev/gitlab_logo.png",
-      "author": {
-        "@type": "Organization",
-        "name": "PushFlow"
-      },
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      }
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://pushflow.pages.dev/#website",
+          "url": "https://pushflow.pages.dev/",
+          "name": "PushFlow",
+          "description": "Modern GitHub & GitLab Web Client",
+          "publisher": {
+            "@id": "https://pushflow.pages.dev/#organization"
+          }
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://pushflow.pages.dev/#organization",
+          "name": "PushFlow",
+          "url": "https://pushflow.pages.dev/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://pushflow.pages.dev/gitlab_logo.png"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://pushflow.pages.dev/#software",
+          "name": "PushFlow Client",
+          "description": "PushFlow is a modern, fully-featured GitHub and GitLab web client. Manage repositories, edit code in real-time, stage commits, and track history seamlessly.",
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "Web",
+          "url": "https://pushflow.pages.dev/",
+          "image": "https://pushflow.pages.dev/gitlab_logo.png",
+          "author": {
+            "@id": "https://pushflow.pages.dev/#organization"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        }
+      ]
     }
     </script>
   </head>

@@ -1,68 +1,107 @@
-# PushFlow - Modern Web Client
+<div align="center">
+  <img src="https://pushflow.pages.dev/gitlab_logo.png" alt="PushFlow Logo" width="120" />
 
-A fully-featured, modern web-based GitHub/GitLab client built with React, Vite, and Tailwind CSS. This application allows users to manage their repositories, view file structures, edit code with a built-in Monaco Editor, stage/unstage files, and push commits directly to GitHub—all from a sleek, responsive browser interface.
+  # 🌊 PushFlow
 
-## 🚀 Features
+  **Modern, Fully-Featured GitHub & GitLab Web Client**
 
-- **Repository Management:** View, search, and clone public or private GitHub repositories.
-- **Real-time Code Editing:** Integrated Microsoft Monaco Editor (the same editor powering VS Code) with syntax highlighting.
-- **Source Control (Git Operations):**
-  - Track modified, added, and deleted files.
-  - Stage and unstage specific files.
-  - Write commit messages and push changes directly to GitHub via the GitHub API.
-- **Commit History & Rollback:** 
-  - View the complete commit history of any branch.
-  - **Revert System (Undo):** Revert your entire repository back to any previous commit with a single click.
-- **File Explorer:** Nested folder tree structure with file icons to easily navigate your codebase.
-- **Responsive Design:** A fully responsive interface that automatically adjusts to mobile, tablet, and desktop screens without breaking the layout.
-- **Secure Authentication:** OAuth integration via Firebase to securely connect your GitHub account.
+  [![Live Demo](https://img.shields.io/badge/Live_Demo-pushflow.pages.dev-0066b8?style=for-the-badge&logo=vercel)](https://pushflow.pages.dev/)
+  [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)]()
+  [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178C6?style=for-the-badge&logo=typescript&logoColor=white)]()
+  [![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)]()
+  [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)]()
+  
+  <p align="center">
+    Manage repositories, edit code in real-time, stage commits, and track history seamlessly—all from a sleek, responsive browser interface.
+  </p>
+</div>
+
+<br />
+
+---
+
+## ✨ Why PushFlow?
+
+**PushFlow** is designed for developers who want a lightweight, powerful, and accessible Git client right in their browser. No need to open a heavy IDE just to make a quick commit or review code.
+
+### 🚀 Live Preview
+**Experience the magic yourself:** [👉 pushflow.pages.dev](https://pushflow.pages.dev/)
+
+---
+
+## 🎨 Features At A Glance
+
+<div align="center">
+  <img src="./src/assets/images/pushflow_mockup_1788223271730.jpg" alt="PushFlow App Mockup" width="100%" style="border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+</div>
+
+<br />
+
+### 📂 Repository Management
+View, search, and clone public or private GitHub and GitLab repositories instantly. 
+
+### 📝 Real-Time Code Editor
+Integrated **Monaco Editor** (the engine behind VS Code) provides syntax highlighting, auto-completion, and a professional coding experience inside the browser.
+
+### 🌿 Advanced Source Control
+- **Stage & Unstage:** Precisely select which files to commit.
+- **Push & Pull:** Sync with your remote repository instantly.
+- **Revert System:** Undo mistakes and rollback to any previous commit with a single click.
+
+### 📱 Responsive & Fast
+A fully responsive, dark-mode optimized interface that automatically adjusts to mobile, tablet, and desktop screens without breaking the layout.
+
+---
 
 ## 🛠️ Tech Stack
 
-- **Frontend Framework:** React 18 (TypeScript)
-- **Build Tool:** Vite
-- **Styling:** Tailwind CSS (Utility-first styling, Dark Mode UI)
-- **Code Editor:** `@monaco-editor/react`
-- **Backend/Auth:** Firebase (Authentication, Firestore) & GitHub REST API
-- **Icons:** FontAwesome (via CDN) & Custom File Icons
+| Technology | Description |
+| --- | --- |
+| **Frontend** | React 18, TypeScript, Vite |
+| **Styling** | Tailwind CSS (Utility-first styling, Dark Mode UI) |
+| **Editor** | `@monaco-editor/react` |
+| **Backend/Auth** | Firebase (Auth, Firestore) & GitHub REST API |
 
-## 🔒 Security Notice (Safe for Public GitHub)
+---
 
-This codebase is **100% safe to be open-sourced and published publicly**. 
-- **No Hardcoded Tokens:** GitHub Personal Access Tokens (PAT) and OAuth tokens are retrieved dynamically upon user login and stored securely in the browser's `localStorage`. They are never hardcoded in the repository.
-- **Public Firebase Config:** The `firebase-applet-config.json` contains Firebase web initialization variables. By design, Firebase API keys for web clients are safe to be public as long as your `firestore.rules` are properly secured (which they are in this app).
-
-## 💻 Getting Started
+## 💻 Getting Started (Local Development)
 
 ### Prerequisites
-- Node.js (v18+)
-- npm or yarn
+Make sure you have **Node.js (v18+)** and **npm/yarn** installed.
 
 ### Installation
 
-1. **Clone the repository:**
+1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/your-repo-name.git
-   cd your-repo-name
+   git clone https://github.com/your-username/pushflow.git
+   cd pushflow
    ```
 
-2. **Install dependencies:**
+2. **Install dependencies**
    ```bash
    npm install
    ```
 
-3. **Start the development server:**
+3. **Start the development server**
    ```bash
    npm run dev
    ```
 
-4. **Build for production:**
+4. **Build for production**
    ```bash
    npm run build
    ```
 
-## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
+---
 
-## 📝 License
-This project is [MIT](https://opensource.org/licenses/MIT) licensed.
+## 🔒 Security Notice
+
+This codebase is **100% safe to be open-sourced and published publicly**. 
+- **No Hardcoded Tokens:** GitHub Personal Access Tokens (PAT) and OAuth tokens are retrieved dynamically and stored securely in the browser's `localStorage`. They are never hardcoded in the repository.
+- **Public Firebase Config:** By design, Firebase API keys for web clients are safe to be public as long as your `firestore.rules` are properly secured (which they are in this app).
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by the PushFlow Team.</sub>
+</div>
