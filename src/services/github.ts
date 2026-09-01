@@ -483,6 +483,7 @@ export async function fetchCommitHistory(
     authorAvatar: item.author?.avatar_url,
     date: item.commit?.author?.date || '',
     htmlUrl: item.html_url,
+    treeSha: item.commit?.tree?.sha,
   }));
 }
 
@@ -520,4 +521,67 @@ export async function fetchPublicUserRepos(username: string): Promise<GitHubRepo
 
   const data = await res.json();
   return Array.isArray(data) ? data : [];
+}
+
+export async function revertRepositoryToCommit(
+  owner: string,
+  repo: string,
+  branch: string,
+  targetCommitSha: string,
+  targetTreeSha: string,
+  token: string
+): Promise<{ newCommitSha: string }> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+  };
+
+  // 1. Get current branch ref to use as parent
+  const refRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+    { headers }
+  );
+  if (!refRes.ok) {
+    throw new Error(`Failed to get current branch ref for ${branch}`);
+  }
+  const refData = await refRes.json();
+  const parentCommitSha = refData.object.sha;
+
+  // 2. Create a new commit using the old commit's tree
+  const commitPayload = {
+    message: `Revert to commit ${targetCommitSha.substring(0, 7)}`,
+    tree: targetTreeSha,
+    parents: [parentCommitSha],
+  };
+
+  const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(commitPayload),
+  });
+
+  if (!commitRes.ok) {
+    const errData = await commitRes.json().catch(() => ({}));
+    throw new Error(errData.message || 'Failed to create revert commit.');
+  }
+
+  const commitData = await commitRes.json();
+  const newCommitSha = commitData.sha;
+
+  // 3. Update the branch ref
+  const updateRefRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+    {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ sha: newCommitSha }),
+    }
+  );
+
+  if (!updateRefRes.ok) {
+    throw new Error('Failed to update branch reference to revert commit.');
+  }
+
+  return { newCommitSha };
 }

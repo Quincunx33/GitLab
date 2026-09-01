@@ -42,6 +42,7 @@ interface SidebarProps {
   commitHistory?: CommitInfo[];
   isLoadingHistory?: boolean;
   onRefreshHistory?: () => void;
+  onRevertCommit?: (commitSha: string, treeSha: string) => void;
   repositories?: GitHubRepoItem[];
   githubUser?: string | null;
   githubToken?: string | null;
@@ -84,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   commitHistory = [],
   isLoadingHistory = false,
   onRefreshHistory,
+  onRevertCommit,
   repositories = [],
   githubUser = null,
   githubToken = null,
@@ -856,15 +858,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span className="font-medium text-[#e1e1e1] line-clamp-2 leading-snug">
                         {firstLineMessage}
                       </span>
-                      <a
-                        href={commit.htmlUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-[10px] bg-[#1e1e1e] hover:bg-sky-900/60 text-sky-400 hover:text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded shrink-0 transition-colors"
-                        title="View commit on GitHub"
-                      >
-                        {commit.shortSha}
-                      </a>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {onRevertCommit && commit.treeSha && (
+                          <button
+                            onClick={() => onRevertCommit(commit.sha, commit.treeSha!)}
+                            className="flex items-center text-[#888] hover:text-amber-400 bg-[#1e1e1e] hover:bg-[#3d3d3d] border border-[#3d3d3d] hover:border-amber-500/50 px-2 py-0.5 rounded transition-colors text-[10px] font-medium"
+                            title="Revert repository to this commit"
+                          >
+                            <i className="fas fa-undo"></i>
+                            <span className="ml-1">Revert</span>
+                          </button>
+                        )}
+                        <a
+                          href={commit.htmlUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-[10px] bg-[#1e1e1e] hover:bg-sky-900/60 text-sky-400 hover:text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded transition-colors"
+                          title="View commit on GitHub"
+                        >
+                          {commit.shortSha}
+                        </a>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] text-[#999] pt-1 border-t border-[#383838]">

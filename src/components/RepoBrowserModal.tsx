@@ -98,30 +98,30 @@ export const RepoBrowserModal: React.FC<RepoBrowserModalProps> = ({
     <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-50 p-3 md:p-6 overflow-hidden">
       <div className="bg-[#1e1e1e] border border-[#3d3d3d] rounded-xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl overflow-hidden font-sans text-[#d4d4d4]">
         {/* Header */}
-        <div className="bg-[#252526] px-5 py-3.5 border-b border-[#3d3d3d] flex items-center justify-between shrink-0 select-none">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#2d2d2d] border border-[#444] flex items-center justify-center text-white">
+        <div className="bg-[#252526] px-3 sm:px-5 py-3.5 border-b border-[#3d3d3d] flex items-start sm:items-center justify-between shrink-0 select-none gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-lg bg-[#2d2d2d] border border-[#444] flex items-center justify-center text-white shrink-0">
               <i className="fab fa-github text-lg"></i>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-white">GitHub Repositories</h3>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h3 className="text-sm font-semibold text-white whitespace-nowrap">GitHub Repositories</h3>
                 {githubUser && (
-                  <span className="text-[11px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded font-mono font-medium">
+                  <span className="text-[11px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded font-mono font-medium truncate max-w-[120px]">
                     @{githubUser}
                   </span>
                 )}
-                <span className="text-[10px] bg-[#333] text-[#aaa] px-2 py-0.5 rounded font-mono">
+                <span className="text-[10px] bg-[#333] text-[#aaa] px-2 py-0.5 rounded font-mono whitespace-nowrap">
                   {repositories.length} repos
                 </span>
               </div>
-              <p className="text-[11px] text-[#888]">
+              <p className="text-[11px] text-[#888] truncate mt-0.5 hidden sm:block">
                 Browse and clone repositories directly into the web editor
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={onRefresh}
               disabled={isLoading}

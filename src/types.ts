@@ -52,6 +52,7 @@ export interface CommitInfo {
   authorAvatar?: string;
   date: string;
   htmlUrl: string;
+  treeSha?: string;
 }
 
 export interface GitHubRepoItem {

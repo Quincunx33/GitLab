@@ -24,6 +24,7 @@ import {
   fetchUserRepositories,
   fetchPublicUserRepos,
   GitHubTreeItem,
+  revertRepositoryToCommit,
 } from './services/github';
 import {
   auth,
@@ -216,6 +217,7 @@ export const App: React.FC = () => {
       loadCommitHistory();
     }
   }, [activeSidebarTab, repoInfo, currentBranch, loadCommitHistory]);
+
 
   // GitHub OAuth Login via Firebase
   const handleGitHubOAuth = async () => {
@@ -1021,6 +1023,38 @@ export const App: React.FC = () => {
   };
 
   // Create GitHub Repository Handler
+  const handleRevertCommit = async (commitSha: string, treeSha: string) => {
+    if (!repoInfo || !githubToken) {
+      showToast("You must be connected to a GitHub repository with an access token to revert.", "error");
+      return;
+    }
+    const confirmRevert = window.confirm(
+      "Are you sure you want to revert the repository to this commit? This will create a new commit replacing the current state with the old state."
+    );
+    if (!confirmRevert) return;
+
+    setIsLoading(true);
+    setLoadingMessage("Reverting repository to old commit...");
+    try {
+      await revertRepositoryToCommit(
+        repoInfo.owner,
+        repoInfo.repo,
+        currentBranch,
+        commitSha,
+        treeSha,
+        githubToken
+      );
+      showToast("Successfully reverted the repository!", "success");
+      await handleCloneRepo(`${repoInfo.owner}/${repoInfo.repo}`, currentBranch);
+      loadCommitHistory();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to revert commit", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleCreateRepoSubmit = async (name: string, description: string, isPrivate: boolean) => {
     if (!githubToken) {
       showToast('Please sign in or enter a GitHub Personal Access Token first.', 'error');
@@ -1921,7 +1955,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area (Sidebar + Editor) */}
-      <div className="main-content flex flex-1 h-full overflow-hidden relative">
+      <div className="main-content flex flex-1 h-full overflow-hidden relative min-w-0">
         {/* Mobile Backdrop Overlay */}
         {isMobileShow && (
           <div
@@ -1964,6 +1998,7 @@ export const App: React.FC = () => {
           commitHistory={commitHistory}
           isLoadingHistory={isLoadingHistory}
           onRefreshHistory={loadCommitHistory}
+          onRevertCommit={handleRevertCommit}
           repositories={repositories}
           githubUser={githubUser}
           githubToken={githubToken}

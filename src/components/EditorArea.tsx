@@ -72,7 +72,7 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
   };
 
   return (
-    <div className="editor-container flex-1 flex flex-col h-full bg-[#1e1e1e] overflow-hidden">
+    <div className="editor-container flex-1 flex flex-col h-full bg-[#1e1e1e] overflow-hidden min-w-0">
       {/* Top Tab Bar */}
       <div className="tabs flex bg-[#2d2d2d] border-b border-[#1a1a1a] overflow-x-auto whitespace-nowrap shrink-0">
         {tabs.map((tab) => (
