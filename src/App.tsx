@@ -10,6 +10,7 @@ import { FileNode, Tab, OutlineItem, RepoInfo, SidebarTab, CommitInfo, GitHubRep
 import { parseOutline } from './utils/codeParser';
 import { getLanguageFromFilename, SYNTAX_OPTIONS } from './utils/fileIcons';
 import { RepoBrowserModal } from './components/RepoBrowserModal';
+import { CommandPalette } from './components/CommandPalette';
 import {
   parseRepoUrl,
   fetchGitHubRepoTree,
@@ -96,6 +97,10 @@ export const App: React.FC = () => {
   const [showCreateRepoModal, setShowCreateRepoModal] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showCommitPromptModal, setShowCommitPromptModal] = useState(false);
+  
+  // Command Palette State
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteMode, setCommandPaletteMode] = useState<'command' | 'shortcuts' | 'search'>('command');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -109,6 +114,33 @@ export const App: React.FC = () => {
     setTimeout(() => {
       setToast(null);
     }, 4000);
+  }, []);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command Palette (Ctrl+P / Cmd+P)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        setCommandPaletteMode('command');
+        setCommandPaletteOpen(true);
+      }
+      // Global Search (Ctrl+Shift+F / Cmd+Shift+F)
+      else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setCommandPaletteMode('command'); // Using command mode for now, can be updated later
+        setCommandPaletteOpen(true);
+      }
+      // Keyboard Shortcuts Help (Ctrl+/ / Cmd+/)
+      else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        setCommandPaletteMode('shortcuts');
+        setCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Global Error Listeners for Uncaught Promises and Errors
@@ -2164,6 +2196,13 @@ export const App: React.FC = () => {
         onConfirmFileOp={handleConfirmFileOp}
       />
 
+      <CommandPalette 
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        mode={commandPaletteMode}
+        fileStructure={fileStructure}
+        onFileSelect={handleFileSelect}
+      />
       <Notification
         isLoading={isLoading}
         loadingMessage={loadingMessage}

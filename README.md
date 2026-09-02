@@ -51,6 +51,19 @@ Integrated **Monaco Editor** (the engine behind VS Code) provides syntax highlig
 ### 📱 Responsive & Fast
 A fully responsive, dark-mode optimized interface that automatically adjusts to mobile, tablet, and desktop screens without breaking the layout.
 
+### ⌨️ Keyboard Shortcuts
+
+Speed up your workflow with our newly added global shortcuts:
+
+| Shortcut | Action |
+| :--- | :--- |
+| <kbd>Ctrl/Cmd</kbd> + <kbd>P</kbd> | Open Command Palette / Search Files |
+| <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> | Global Search |
+| <kbd>Ctrl/Cmd</kbd> + <kbd>/</kbd> | Show Keyboard Shortcuts Help |
+| <kbd>Ctrl/Cmd</kbd> + <kbd>S</kbd> | Save Active File |
+| <kbd>Ctrl/Cmd</kbd> + <kbd>W</kbd> | Close Active Tab |
+| <kbd>Esc</kbd> | Close Modals & Overlays |
+
 ---
 
 ## 🛠️ Tech Stack
