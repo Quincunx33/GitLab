@@ -89,3 +89,21 @@ export interface FileOpModalState {
   nodeType?: 'file' | 'folder';
   destinationPath?: string;
 }
+
+export interface FileConflictItem {
+  name: string;
+  targetPath: string;
+  incomingContent: string;
+  incomingSize: number;
+  existingContent?: string;
+  existingSize?: number;
+  action: 'overwrite' | 'keep_both' | 'skip';
+}
+
+export interface FileConflictModalState {
+  isOpen: boolean;
+  sourceType: 'file' | 'folder' | 'zip';
+  conflicts: FileConflictItem[];
+  nonConflictingFiles: Array<{ path: string; name: string; content: string }>;
+  folderName?: string;
+}

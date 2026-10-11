@@ -12,21 +12,34 @@ export interface GitHubTreeItem {
 
 export function parseGitHubError(status: number, message: string, defaultMessage: string): Error {
   if (status === 401) {
-    return new Error('GitHub Token is invalid or expired. Please sign in again.');
+    const err = new Error('GitHub Token is invalid or expired. Please reconnect your account or provide a valid token.');
+    (err as any).status = 401;
+    (err as any).isAuthError = true;
+    return err;
   }
-  if (status === 403 || message.toLowerCase().includes('rate limit')) {
-    return new Error('GitHub API rate limit exceeded. Please wait a moment or sign in to increase your limit.');
+  if (status === 403 || message?.toLowerCase().includes('rate limit')) {
+    const err = new Error('GitHub API rate limit exceeded. Please wait a moment or sign in to increase your limit.');
+    (err as any).status = 403;
+    return err;
   }
   if (status === 404) {
-    return new Error('Repository or resource not found. It might be private or deleted.');
+    const err = new Error('Repository or resource not found. It might be private or deleted.');
+    (err as any).status = 404;
+    return err;
   }
   if (status === 409) {
-    return new Error('Conflict occurred. The repository might be empty or out of sync.');
+    const err = new Error('Conflict occurred. The repository might be empty or out of sync.');
+    (err as any).status = 409;
+    return err;
   }
   if (status === 422) {
-    return new Error(`Validation failed: ${message}`);
+    const err = new Error(`Validation failed: ${message}`);
+    (err as any).status = 422;
+    return err;
   }
-  return new Error(message || defaultMessage);
+  const err = new Error(message || defaultMessage);
+  (err as any).status = status;
+  return err;
 }
 
 export function parseRepoUrl(input: string): { owner: string; repo: string } | null {

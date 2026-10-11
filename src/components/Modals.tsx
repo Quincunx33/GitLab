@@ -11,6 +11,8 @@ interface ModalsProps {
   onGitHubOAuth: () => void;
   firebaseUser: any;
   onLogoutFirebase: () => void;
+  isOAuthExpired?: boolean;
+  authType?: 'oauth' | 'pat' | null;
 
   showCloneModal: boolean;
   onCloseCloneModal: () => void;
@@ -47,6 +49,8 @@ export const Modals: React.FC<ModalsProps> = ({
   onGitHubOAuth,
   firebaseUser,
   onLogoutFirebase,
+  isOAuthExpired = false,
+  authType = null,
 
   showCloneModal,
   onCloseCloneModal,
@@ -115,12 +119,31 @@ export const Modals: React.FC<ModalsProps> = ({
           <div className="bg-[#252526] border border-[#3d3d3d] rounded-lg w-full max-w-md p-5 text-xs text-[#d4d4d4] shadow-2xl my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-[#3d3d3d] mb-4">
               <h3 className="text-sm font-semibold flex items-center gap-2 text-white">
-                <i className="fab fa-github text-lg"></i> GitHub Authentication & Firebase
+                <i className="fab fa-github text-lg text-sky-400"></i> GitHub Authentication & Session
               </h3>
               <button onClick={onCloseGitHubModal} className="text-[#888] hover:text-white text-base p-1">
                 &times;
               </button>
             </div>
+
+            {/* OAuth Session Expired Warning Banner */}
+            {isOAuthExpired && (
+              <div className="mb-4 p-3 bg-amber-950/80 border border-amber-600/60 rounded-lg space-y-2 text-amber-200">
+                <div className="flex items-center gap-2 font-semibold text-amber-300">
+                  <i className="fas fa-exclamation-triangle text-amber-400 text-sm"></i>
+                  <span>GitHub OAuth Session Expired</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                  Your GitHub OAuth access token has expired due to inactivity. Reconnect below to resume loading repositories and pushing or pulling commits.
+                </p>
+                <button
+                  onClick={onGitHubOAuth}
+                  className="w-full bg-amber-600 hover:bg-amber-500 text-white font-medium py-1.5 px-3 rounded text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+                >
+                  <i className="fas fa-rotate"></i> Reconnect GitHub OAuth Now
+                </button>
+              </div>
+            )}
 
             {/* Logged in status header */}
             {(firebaseUser || githubUser) && (
@@ -128,16 +151,36 @@ export const Modals: React.FC<ModalsProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     {firebaseUser?.photoURL ? (
-                      <img src={firebaseUser.photoURL} alt="Avatar" className="w-7 h-7 rounded-full" />
+                      <img src={firebaseUser.photoURL} alt="Avatar" className="w-8 h-8 rounded-full border border-sky-500/40" />
                     ) : (
                       <i className="fas fa-user-circle text-2xl text-sky-400"></i>
                     )}
                     <div>
-                      <div className="font-semibold text-white">
-                        {githubUser || firebaseUser?.displayName || firebaseUser?.email}
+                      <div className="font-semibold text-white flex items-center gap-1.5">
+                        <span>{githubUser || firebaseUser?.displayName || firebaseUser?.email}</span>
+                        {authType === 'oauth' && (
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                            isOAuthExpired 
+                              ? 'bg-amber-900/80 text-amber-300 border border-amber-600/50' 
+                              : 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                          }`}>
+                            {isOAuthExpired ? 'OAuth Expired' : 'OAuth Active'}
+                          </span>
+                        )}
+                        {authType === 'pat' && (
+                          <span className="text-[9px] bg-sky-950/80 text-sky-300 border border-sky-600/50 px-1.5 py-0.2 rounded font-bold uppercase">
+                            PAT
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-[#888]">
-                        {githubToken ? 'Personal Access Token / OAuth active' : 'Firebase authenticated'}
+                        {authType === 'oauth'
+                          ? isOAuthExpired
+                            ? 'OAuth Token expired (needs reconnect)'
+                            : 'Connected with full GitHub OAuth scopes'
+                          : githubToken
+                          ? 'Personal Access Token (PAT) active'
+                          : 'Firebase session authenticated'}
                       </div>
                     </div>
                   </div>
@@ -165,14 +208,27 @@ export const Modals: React.FC<ModalsProps> = ({
               </div>
             )}
 
-            {/* OAuth Buttons */}
-            <div className="space-y-2.5 mb-4">
+            {/* OAuth Buttons & Information */}
+            <div className="space-y-2 mb-4">
               <button
                 onClick={onGitHubOAuth}
-                className="w-full bg-[#24292e] hover:bg-[#2f363d] text-white p-2.5 rounded border border-[#444] flex items-center justify-center gap-2 font-medium transition-colors"
+                className="w-full bg-[#24292e] hover:bg-[#2f363d] text-white p-2.5 rounded border border-[#444] flex items-center justify-center gap-2 font-medium transition-colors cursor-pointer shadow-sm"
               >
-                <i className="fab fa-github text-base"></i> Sign in with GitHub OAuth
+                <i className="fab fa-github text-base text-sky-400"></i>
+                <span>
+                  {isOAuthExpired
+                    ? 'Reconnect GitHub OAuth Session'
+                    : authType === 'oauth' && githubToken
+                    ? 'Refresh GitHub OAuth Session'
+                    : 'Sign in with GitHub OAuth'}
+                </span>
               </button>
+              <div className="text-[10.5px] text-[#888] leading-tight px-1 flex items-start gap-1.5">
+                <i className="fas fa-info-circle text-sky-400 mt-0.5 shrink-0"></i>
+                <span>
+                  GitHub OAuth access tokens expire periodically. You can renew your session with a single click anytime.
+                </span>
+              </div>
             </div>
 
             <div className="relative flex py-2 items-center">

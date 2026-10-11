@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CommitInfo, FileNode, GitHubRepoItem, OutlineItem, RepoInfo, SidebarTab } from '../types';
 import { getFileIconClass } from '../utils/fileIcons';
+import { FileContextMenu } from './FileContextMenu';
 
 interface ContextMenuState {
   x: number;
@@ -49,6 +50,8 @@ interface SidebarProps {
   onOpenRepoBrowser?: () => void;
   onCloneRepo?: (url: string, branch: string) => void;
   onBackToRepos?: () => void;
+  isOAuthExpired?: boolean;
+  onReconnectOAuth?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -92,6 +95,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenRepoBrowser,
   onCloneRepo,
   onBackToRepos,
+  isOAuthExpired = false,
+  onReconnectOAuth,
 }) => {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -157,6 +162,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
       y: Math.min(e.clientY, window.innerHeight - 220),
       node,
     });
+  };
+
+  const handleNewFile = (parentPath: string) => {
+    if (onNewItem) onNewItem(parentPath, 'file');
+  };
+
+  const handleNewFolder = (parentPath: string) => {
+    if (onNewItem) onNewItem(parentPath, 'folder');
+  };
+
+  const handleRename = (path: string, name: string, type: 'file' | 'folder') => {
+    if (onRenameNode) onRenameNode(path, name, type);
+  };
+
+  const handleDelete = (path: string, type: 'file' | 'folder', name: string) => {
+    if (onDeleteNode) onDeleteNode(path, type, name);
+  };
+
+  const handleMove = (path: string, name: string, type: 'file' | 'folder') => {
+    if (onMoveItem) onMoveItem(path, name, type);
   };
 
   const renderFileNode = (node: FileNode) => {
@@ -339,6 +364,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         isMobileShow ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
+      {contextMenu && (
+        <div ref={contextMenuRef}>
+          <FileContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            node={contextMenu.node}
+            onClose={() => setContextMenu(null)}
+            onNewFile={handleNewFile}
+            onNewFolder={handleNewFolder}
+            onRename={handleRename}
+            onDelete={handleDelete}
+            onMove={handleMove}
+          />
+        </div>
+      )}
+
       {/* Sidebar Top Icon Navigation Bar */}
       <div className="sidebar-header flex items-center p-1 bg-[#2d2d2d] border-b border-[#1a1a1a]">
         <button
@@ -393,6 +434,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <i className="fas fa-times"></i>
         </button>
       </div>
+
+      {/* OAuth Expired Alert Banner */}
+      {isOAuthExpired && (
+        <div className="mx-2 my-2 p-2 bg-amber-950/80 border border-amber-600/60 rounded text-amber-200 text-[11px] flex items-center justify-between gap-1.5 shrink-0 shadow-sm">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <i className="fas fa-exclamation-triangle text-amber-400 shrink-0 text-xs animate-pulse"></i>
+            <span className="font-semibold text-amber-300 truncate">OAuth Expired</span>
+          </div>
+          {onReconnectOAuth && (
+            <button
+              onClick={onReconnectOAuth}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-medium px-2 py-0.5 rounded text-[10px] shrink-0 transition-colors cursor-pointer shadow-xs"
+            >
+              Reconnect
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Explorer Content */}
       {activeTab === 'explorer' && (

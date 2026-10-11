@@ -120,17 +120,6 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {onCompareFile && (
-              <button
-                onClick={() => onCompareFile(activeTab.path)}
-                className="bg-[#2d2d2d] hover:bg-[#0066b8] hover:text-white text-[#ccc] border border-[#3d3d3d] px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition-colors"
-                title="View visual diff against repository original"
-              >
-                <i className="fas fa-code-compare text-sky-400"></i>
-                <span>Local Diff</span>
-              </button>
-            )}
-
             {onRevertFile && activeTab.isModified && (
               <button
                 onClick={() => {

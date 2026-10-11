@@ -6,7 +6,23 @@ import { EditorArea } from './components/EditorArea';
 import { Modals } from './components/Modals';
 import { Notification } from './components/Notification';
 import { CompareModal } from './components/CompareModal';
-import { FileNode, Tab, OutlineItem, RepoInfo, SidebarTab, CommitInfo, GitHubRepoItem } from './types';
+import { FileConflictModal } from './components/FileConflictModal';
+import { SensitiveScanModal } from './components/SensitiveScanModal';
+import { LivePreviewModal } from './components/LivePreviewModal';
+import { GitignoreGeneratorModal } from './components/GitignoreGeneratorModal';
+import { saveWorkspace, loadWorkspace } from './services/db';
+import { scanFilesForSecrets, SensitiveScanFinding } from './utils/sensitiveScanner';
+import {
+  FileNode,
+  Tab,
+  OutlineItem,
+  RepoInfo,
+  SidebarTab,
+  CommitInfo,
+  GitHubRepoItem,
+  FileConflictItem,
+  FileConflictModalState,
+} from './types';
 import { parseOutline } from './utils/codeParser';
 import { getLanguageFromFilename, SYNTAX_OPTIONS } from './utils/fileIcons';
 import { RepoBrowserModal } from './components/RepoBrowserModal';
@@ -31,6 +47,7 @@ import {
   auth,
   testFirebaseConnection,
   signInWithGitHubOAuth,
+  reconnectGitHubOAuth,
   logoutUser,
   onAuthStateChanged,
   User,
@@ -49,6 +66,8 @@ export const App: React.FC = () => {
   // GitHub State
   const [githubToken, setGithubToken] = useState<string | null>(() => localStorage.getItem('github_pat'));
   const [githubUser, setGithubUser] = useState<string | null>(null);
+  const [authType, setAuthType] = useState<'oauth' | 'pat' | null>(() => (localStorage.getItem('github_auth_type') as any) || (localStorage.getItem('github_pat') ? 'pat' : null));
+  const [isOAuthExpired, setIsOAuthExpired] = useState<boolean>(false);
   const [repositories, setRepositories] = useState<GitHubRepoItem[]>([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState<boolean>(false);
   const [showRepoBrowserModal, setShowRepoBrowserModal] = useState<boolean>(false);
@@ -84,6 +103,14 @@ export const App: React.FC = () => {
     targetPath: '',
   });
 
+  // File Conflict Modal State (Existing File Rewrite System)
+  const [conflictModalState, setConflictModalState] = useState<FileConflictModalState>({
+    isOpen: false,
+    sourceType: 'file',
+    conflicts: [],
+    nonConflictingFiles: [],
+  });
+
   // Outline State
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
 
@@ -98,6 +125,17 @@ export const App: React.FC = () => {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showCommitPromptModal, setShowCommitPromptModal] = useState(false);
   
+  // Sensitive File & Secret Scanner State
+  const [sensitiveFindings, setSensitiveFindings] = useState<SensitiveScanFinding[]>([]);
+  const [showSensitiveModal, setShowSensitiveModal] = useState(false);
+  const [pendingCommitFiles, setPendingCommitFiles] = useState<CommitFilePayload[]>([]);
+  const [pendingDeletedPaths, setPendingDeletedPaths] = useState<string[]>([]);
+  const [pendingCommitMsg, setPendingCommitMsg] = useState<string>('');
+
+  // Live Preview & .gitignore Modal State
+  const [showLivePreviewModal, setShowLivePreviewModal] = useState(false);
+  const [showGitignoreModal, setShowGitignoreModal] = useState(false);
+
   // Command Palette State
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteMode, setCommandPaletteMode] = useState<'command' | 'shortcuts' | 'search'>('command');
@@ -146,15 +184,26 @@ export const App: React.FC = () => {
   // Global Error Listeners for Uncaught Promises and Errors
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('Unhandled Promise Rejection:', event.reason);
-      const msg = event.reason?.message || (typeof event.reason === 'string' ? event.reason : 'An unexpected error occurred in a background task.');
-      showToast(msg, 'error');
+      const errorId = 'REJ-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+      if (!event.reason) return;
+      const msg = event.reason?.message || (typeof event.reason === 'string' ? event.reason : null);
+      if (!msg) return;
+      console.warn(`[${errorId}] Unhandled Promise Rejection:`, event.reason);
+      showToast(`${msg} (ID: ${errorId})`, 'error');
     };
 
     const handleError = (event: ErrorEvent) => {
-      console.error('Uncaught Error:', event.error);
-      const msg = event.error?.message || event.message || 'An unexpected application error occurred.';
-      showToast(msg, 'error');
+      // Ignore cross-origin script error redaction artifacts with no actionable error
+      if (event.message === 'Script error.' || (!event.error && !event.message)) {
+        return;
+      }
+      const err = event.error || event.message;
+      if (!err) return;
+      
+      const errorId = 'ERR-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+      console.warn(`[${errorId}] Application Error:`, err);
+      const msg = event.error?.message || (typeof event.message === 'string' ? event.message : 'An unexpected error occurred.');
+      showToast(`${msg} (ID: ${errorId})`, 'error');
     };
 
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
@@ -167,13 +216,42 @@ export const App: React.FC = () => {
   }, [showToast]);
 
   // Initialize Firebase connection & Auth state listener
+  // Initialize Firebase connection & Auth state listener
   useEffect(() => {
+    // 1. Load persisted workspace
+    loadWorkspace().then((state) => {
+      if (state) {
+        setFileStructure(state.fileStructure);
+        setTabs(state.tabs);
+        setActiveTabId(state.activeTabId);
+        setRepoInfo(state.repoInfo);
+        setCurrentBranch(state.currentBranch);
+        setStagedChanges(new Map(state.stagedChanges));
+        setDeletedFiles(new Set(state.deletedFiles));
+        showToast('Restored previous workspace', 'success');
+      }
+    });
+
     testFirebaseConnection();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
     });
     return () => unsubscribe();
   }, []);
+
+  // 2. Persist workspace state on critical changes
+  useEffect(() => {
+    const state = {
+      fileStructure,
+      tabs,
+      activeTabId,
+      repoInfo,
+      currentBranch,
+      stagedChanges: Array.from(stagedChanges.entries()) as [string, string][],
+      deletedFiles: Array.from(deletedFiles) as string[],
+    };
+    saveWorkspace(state);
+  }, [fileStructure, tabs, activeTabId, repoInfo, currentBranch, stagedChanges, deletedFiles]);
 
   // Load User Repositories from GitHub
   const loadUserRepositories = useCallback(
@@ -200,14 +278,27 @@ export const App: React.FC = () => {
         }
       } catch (err: any) {
         console.error('Error fetching repositories:', err);
-        if (notify) {
+        const isAuthErr =
+          err?.isAuthError ||
+          err?.status === 401 ||
+          err?.message?.toLowerCase().includes('token') ||
+          err?.message?.toLowerCase().includes('expired') ||
+          err?.message?.toLowerCase().includes('401') ||
+          err?.message?.toLowerCase().includes('bad credentials');
+
+        const storedAuthType = localStorage.getItem('github_auth_type');
+        if (isAuthErr && (storedAuthType === 'oauth' || firebaseUser)) {
+          setIsOAuthExpired(true);
+        }
+
+        if (notify || isAuthErr) {
           showToast(err.message || 'Failed to load GitHub repositories', 'error');
         }
       } finally {
         setIsLoadingRepos(false);
       }
     },
-    [githubToken, githubUser, showToast]
+    [githubToken, githubUser, firebaseUser, showToast]
   );
 
   // Auto-fetch repositories whenever credentials change
@@ -223,15 +314,33 @@ export const App: React.FC = () => {
       fetchGitHubUser(githubToken)
         .then((username) => {
           setGithubUser(username);
+          setIsOAuthExpired(false);
         })
-        .catch(() => {
-          localStorage.removeItem('github_pat');
-          setGithubToken(null);
-          setGithubUser(null);
-          setRepositories([]);
+        .catch((err: any) => {
+          console.warn('Initial token validation failed:', err);
+          const storedAuthType = localStorage.getItem('github_auth_type');
+          const isAuthErr =
+            err?.isAuthError ||
+            err?.status === 401 ||
+            err?.message?.toLowerCase().includes('token') ||
+            err?.message?.toLowerCase().includes('expired') ||
+            err?.message?.toLowerCase().includes('401') ||
+            err?.message?.toLowerCase().includes('bad credentials');
+
+          if (storedAuthType === 'oauth' || firebaseUser) {
+            setIsOAuthExpired(true);
+            showToast('GitHub OAuth session expired. Please reconnect your account.', 'error');
+          } else {
+            localStorage.removeItem('github_pat');
+            localStorage.removeItem('github_auth_type');
+            setGithubToken(null);
+            setGithubUser(null);
+            setRepositories([]);
+            showToast('Stored GitHub Token was invalid or expired and has been cleared.', 'info');
+          }
         });
     }
-  }, [githubToken]);
+  }, [githubToken, firebaseUser, showToast]);
 
   // Load Commit History
   const loadCommitHistory = useCallback(async () => {
@@ -275,14 +384,22 @@ export const App: React.FC = () => {
   const handleGitHubOAuth = async () => {
     try {
       setIsLoading(true);
-      setLoadingMessage('Signing in with GitHub OAuth...');
-      const { user, githubAccessToken } = await signInWithGitHubOAuth();
+      setLoadingMessage(
+        isOAuthExpired
+          ? 'Reconnecting GitHub OAuth session...'
+          : 'Signing in with GitHub OAuth...'
+      );
+      const { user, githubAccessToken } = await reconnectGitHubOAuth();
       const resolvedUsername = (user as any).reloadUserInfo?.screenName || user.displayName || user.email || 'User';
 
       if (githubAccessToken) {
         localStorage.setItem('github_pat', githubAccessToken);
+        localStorage.setItem('github_auth_type', 'oauth');
+        localStorage.setItem('github_token_timestamp', Date.now().toString());
         setGithubToken(githubAccessToken);
-        showToast(`Connected with GitHub OAuth as ${resolvedUsername}!`, 'success');
+        setAuthType('oauth');
+        setIsOAuthExpired(false);
+        showToast(`Connected with GitHub OAuth as @${resolvedUsername}!`, 'success');
       } else {
         showToast(`Signed in with GitHub as ${resolvedUsername}`, 'success');
       }
@@ -292,7 +409,15 @@ export const App: React.FC = () => {
       
       // Immediately fetch and display user's repositories
       await loadUserRepositories(githubAccessToken || null, resolvedUsername, true);
+
+      // If active repo exists, re-sync branches
+      if (repoInfo && githubAccessToken) {
+        fetchBranches(repoInfo.owner, repoInfo.repo, githubAccessToken)
+          .then((bList) => setBranches(bList))
+          .catch(() => {});
+      }
     } catch (err: any) {
+      console.error('GitHub OAuth error:', err);
       showToast(err.message || 'GitHub OAuth failed', 'error');
     } finally {
       setIsLoading(false);
@@ -478,6 +603,185 @@ export const App: React.FC = () => {
       return nextTabs;
     });
   };
+
+  // Helper to find file node recursively
+  const findNodeByPath = useCallback((node: FileNode | null, targetPath: string): FileNode | null => {
+    if (!node) return null;
+    if (node.path === targetPath) return node;
+    if (node.children) {
+      for (const child of Object.values(node.children)) {
+        const found = findNodeByPath(child, targetPath);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper to insert or update a file in the FileNode hierarchy
+  const insertFileIntoTree = useCallback((root: FileNode, fullPath: string, content: string): FileNode => {
+    let relPath = fullPath;
+    if (relPath.startsWith(root.path + '/')) {
+      relPath = relPath.slice(root.path.length + 1);
+    } else if (relPath === root.path) {
+      relPath = root.name;
+    }
+    const parts = relPath.split('/').filter(Boolean);
+    if (parts.length === 0) return root;
+
+    const cloneChildren = (children?: Record<string, FileNode>): Record<string, FileNode> => {
+      const copy: Record<string, FileNode> = {};
+      if (children) {
+        Object.entries(children).forEach(([k, v]) => {
+          copy[k] = { ...v, children: v.children ? { ...v.children } : undefined };
+        });
+      }
+      return copy;
+    };
+
+    const newRoot: FileNode = {
+      ...root,
+      children: cloneChildren(root.children),
+    };
+
+    let current = newRoot;
+    let currentPathAcc = root.path;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isFile = i === parts.length - 1;
+      currentPathAcc = `${currentPathAcc}/${part}`;
+
+      if (!current.children) {
+        current.children = {};
+      }
+
+      if (isFile) {
+        current.children[part] = {
+          name: part,
+          path: fullPath.startsWith(root.path) ? fullPath : currentPathAcc,
+          type: 'file',
+          content,
+        };
+      } else {
+        if (!current.children[part] || current.children[part].type !== 'folder') {
+          current.children[part] = {
+            name: part,
+            path: currentPathAcc,
+            type: 'folder',
+            children: {},
+          };
+        }
+        current = current.children[part];
+      }
+    }
+
+    return newRoot;
+  }, []);
+
+  // Helper to generate a unique file path for Keep Both
+  const generateUniquePath = useCallback((root: FileNode, targetPath: string): string => {
+    const parts = targetPath.split('/');
+    const fullName = parts.pop() || 'file';
+    const parentDir = parts.join('/');
+
+    const lastDot = fullName.lastIndexOf('.');
+    const baseName = lastDot > 0 ? fullName.slice(0, lastDot) : fullName;
+    const ext = lastDot > 0 ? fullName.slice(lastDot) : '';
+
+    let counter = 1;
+    let testPath = parentDir ? `${parentDir}/${baseName} (${counter})${ext}` : `${baseName} (${counter})${ext}`;
+
+    while (findNodeByPath(root, testPath)) {
+      counter++;
+      testPath = parentDir ? `${parentDir}/${baseName} (${counter})${ext}` : `${baseName} (${counter})${ext}`;
+    }
+
+    return testPath;
+  }, [findNodeByPath]);
+
+  // Handler to resolve existing file conflicts and rewrite files
+  const handleResolveConflicts = useCallback((resolvedConflicts: FileConflictItem[]) => {
+    const { nonConflictingFiles } = conflictModalState;
+    let overwrittenCount = 0;
+    let keptBothCount = 0;
+    let skippedCount = 0;
+
+    setFileStructure((prev) => {
+      if (!prev) return prev;
+      let currentTree = prev;
+
+      for (const conflict of resolvedConflicts) {
+        if (conflict.action === 'overwrite') {
+          currentTree = insertFileIntoTree(currentTree, conflict.targetPath, conflict.incomingContent);
+          overwrittenCount++;
+
+          setTabs((prevTabs) =>
+            prevTabs.map((t) =>
+              t.path === conflict.targetPath
+                ? { ...t, content: conflict.incomingContent, isModified: true }
+                : t
+            )
+          );
+          setSourceControlChanges((sc) => {
+            const next = new Map(sc);
+            next.set(conflict.targetPath, 'modified');
+            return next;
+          });
+        } else if (conflict.action === 'keep_both') {
+          const newPath = generateUniquePath(currentTree, conflict.targetPath);
+          const newName = newPath.split('/').pop() || conflict.name;
+          currentTree = insertFileIntoTree(currentTree, newPath, conflict.incomingContent);
+          keptBothCount++;
+
+          setSourceControlChanges((sc) => {
+            const next = new Map(sc);
+            next.set(newPath, 'added');
+            return next;
+          });
+          openFileInTab(newPath, newName, conflict.incomingContent);
+        } else {
+          skippedCount++;
+        }
+      }
+
+      for (const item of nonConflictingFiles) {
+        currentTree = insertFileIntoTree(currentTree, item.path, item.content);
+        setSourceControlChanges((sc) => {
+          const next = new Map(sc);
+          next.set(item.path, 'added');
+          return next;
+        });
+      }
+
+      return currentTree;
+    });
+
+    const firstToOpen =
+      resolvedConflicts.find((c) => c.action === 'overwrite' || c.action === 'keep_both') ||
+      nonConflictingFiles[0];
+    if (firstToOpen) {
+      const p = (firstToOpen as any).targetPath || (firstToOpen as any).path;
+      const c = (firstToOpen as any).incomingContent || (firstToOpen as any).content;
+      openFileInTab(p, firstToOpen.name, c);
+    }
+
+    setConflictModalState({
+      isOpen: false,
+      sourceType: 'file',
+      conflicts: [],
+      nonConflictingFiles: [],
+    });
+
+    const summaryParts: string[] = [];
+    if (overwrittenCount > 0) summaryParts.push(`${overwrittenCount} rewritten`);
+    if (keptBothCount > 0) summaryParts.push(`${keptBothCount} kept both`);
+    if (skippedCount > 0) summaryParts.push(`${skippedCount} skipped`);
+    if (nonConflictingFiles.length > 0) summaryParts.push(`${nonConflictingFiles.length} new imported`);
+
+    showToast(`Import completed: ${summaryParts.join(', ') || 'No changes'}`, 'success');
+    setActiveSidebarTab('explorer');
+    setIsMobileShow(true);
+  }, [conflictModalState, insertFileIntoTree, generateUniquePath, openFileInTab, showToast]);
 
   // Toolbar Actions
   const handleNewFile = () => {
@@ -759,70 +1063,221 @@ export const App: React.FC = () => {
     }
 
     // Single non-zip file upload
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = (e.target?.result as string) || '';
-      openFileInTab(file.name, file.name, content);
+    try {
+      const content = await file.text();
+      const fileName = file.name;
+
+      if (!fileStructure) {
+        const rootNode: FileNode = {
+          name: 'workspace',
+          path: 'workspace',
+          type: 'folder',
+          children: {
+            [fileName]: {
+              name: fileName,
+              path: `workspace/${fileName}`,
+              type: 'file',
+              content,
+            },
+          },
+        };
+        setFileStructure(rootNode);
+        openFileInTab(`workspace/${fileName}`, fileName, content);
+        setActiveSidebarTab('explorer');
+        setIsMobileShow(true);
+        showToast(`Opened "${fileName}"`, 'success');
+        return;
+      }
+
+      // Existing workspace present - check for collision
+      const targetPath = `${fileStructure.path}/${fileName}`;
+      const existing = findNodeByPath(fileStructure, targetPath) || findNodeByPath(fileStructure, fileName);
+
+      if (existing) {
+        // COLLISION DETECTED! Open File Conflict & Rewrite Modal
+        setConflictModalState({
+          isOpen: true,
+          sourceType: 'file',
+          conflicts: [
+            {
+              name: fileName,
+              targetPath: existing.path,
+              incomingContent: content,
+              incomingSize: file.size,
+              existingContent: existing.content || '',
+              existingSize: (existing.content || '').length,
+              action: 'overwrite',
+            },
+          ],
+          nonConflictingFiles: [],
+        });
+        return;
+      }
+
+      // No collision, insert smoothly into current workspace
+      setFileStructure((prev) => (prev ? insertFileIntoTree(prev, targetPath, content) : prev));
+      openFileInTab(targetPath, fileName, content);
+      setSourceControlChanges((sc) => {
+        const next = new Map(sc);
+        next.set(targetPath, 'added');
+        return next;
+      });
       setActiveSidebarTab('explorer');
       setIsMobileShow(true);
-    };
-    reader.readAsText(file);
+      showToast(`Imported "${fileName}"`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to read file', 'error');
+    }
   };
 
-  const handleOpenFolder = (files: FileList) => {
+  const handleOpenFolder = async (files: FileList) => {
     if (!files || files.length === 0) return;
 
-    const rootName = files[0].webkitRelativePath.split('/')[0] || 'folder';
-    const rootNode: FileNode = {
-      name: rootName,
-      path: rootName,
-      type: 'folder',
-      children: {},
-    };
+    try {
+      setIsLoading(true);
+      setLoadingMessage('Importing folder files...');
 
-    const filePromises: Promise<void>[] = [];
+      const rootName = files[0].webkitRelativePath.split('/')[0] || 'folder';
+      const fileListArray = Array.from(files);
 
-    Array.from(files).forEach((file) => {
-      const relPath = file.webkitRelativePath;
-      const parts = relPath.split('/');
-
-      let current = rootNode;
-      for (let i = 1; i < parts.length; i++) {
-        const part = parts[i];
-        const isFile = i === parts.length - 1;
-
-        if (isFile) {
-          const promise = file.text().then((text) => {
-            if (!current.children) current.children = {};
-            current.children[part] = {
-              name: part,
-              path: relPath,
-              type: 'file',
-              content: text,
-            };
+      const fileEntries: Array<{ name: string; relPath: string; content: string; size: number }> = [];
+      for (const file of fileListArray) {
+        try {
+          const content = await file.text();
+          fileEntries.push({
+            name: file.name,
+            relPath: file.webkitRelativePath,
+            content,
+            size: file.size,
           });
-          filePromises.push(promise);
-        } else {
-          if (!current.children) current.children = {};
-          if (!current.children[part]) {
-            current.children[part] = {
-              name: part,
-              path: parts.slice(0, i + 1).join('/'),
-              type: 'folder',
-              children: {},
-            };
-          }
-          current = current.children[part];
+        } catch {
+          // ignore unreadable/binary
         }
       }
-    });
 
-    Promise.all(filePromises).then(() => {
-      setFileStructure(rootNode);
-      setActiveSidebarTab('explorer');
-      setIsMobileShow(true);
-      showToast(`Opened folder "${rootName}"`, 'success');
-    });
+      if (fileEntries.length === 0) {
+        showToast('No readable text files found in selected folder', 'info');
+        return;
+      }
+
+      // If workspace is completely empty, open folder as workspace root
+      if (!fileStructure) {
+        const rootNode: FileNode = {
+          name: rootName,
+          path: rootName,
+          type: 'folder',
+          children: {},
+        };
+
+        for (const entry of fileEntries) {
+          const parts = entry.relPath.split('/');
+          let current = rootNode;
+          for (let i = 1; i < parts.length; i++) {
+            const part = parts[i];
+            const isFile = i === parts.length - 1;
+            if (isFile) {
+              if (!current.children) current.children = {};
+              current.children[part] = {
+                name: part,
+                path: entry.relPath,
+                type: 'file',
+                content: entry.content,
+              };
+            } else {
+              if (!current.children) current.children = {};
+              if (!current.children[part]) {
+                current.children[part] = {
+                  name: part,
+                  path: parts.slice(0, i + 1).join('/'),
+                  type: 'folder',
+                  children: {},
+                };
+              }
+              current = current.children[part];
+            }
+          }
+        }
+
+        setFileStructure(rootNode);
+        setActiveSidebarTab('explorer');
+        setIsMobileShow(true);
+
+        if (fileEntries[0]) {
+          openFileInTab(fileEntries[0].relPath, fileEntries[0].name, fileEntries[0].content);
+        }
+
+        showToast(`Opened folder "${rootName}" (${fileEntries.length} files)`, 'success');
+        return;
+      }
+
+      // Workspace is ALREADY OPEN! Check for existing file collisions
+      const conflicts: FileConflictItem[] = [];
+      const nonConflicting: Array<{ path: string; name: string; content: string }> = [];
+
+      for (const entry of fileEntries) {
+        const targetPath = `${fileStructure.path}/${entry.relPath}`;
+        const existing =
+          findNodeByPath(fileStructure, targetPath) ||
+          findNodeByPath(fileStructure, `${fileStructure.path}/${entry.name}`) ||
+          findNodeByPath(fileStructure, entry.name);
+
+        if (existing) {
+          conflicts.push({
+            name: entry.name,
+            targetPath: existing.path,
+            incomingContent: entry.content,
+            incomingSize: entry.size,
+            existingContent: existing.content || '',
+            existingSize: (existing.content || '').length,
+            action: 'overwrite',
+          });
+        } else {
+          nonConflicting.push({
+            path: targetPath,
+            name: entry.name,
+            content: entry.content,
+          });
+        }
+      }
+
+      if (conflicts.length > 0) {
+        // Collisions detected! Open File Conflict & Rewrite Modal
+        setConflictModalState({
+          isOpen: true,
+          sourceType: 'folder',
+          folderName: rootName,
+          conflicts,
+          nonConflictingFiles: nonConflicting,
+        });
+      } else {
+        // No conflicts, merge all files into existing workspace
+        setFileStructure((prev) => {
+          if (!prev) return prev;
+          let currentTree = prev;
+          for (const item of nonConflicting) {
+            currentTree = insertFileIntoTree(currentTree, item.path, item.content);
+          }
+          return currentTree;
+        });
+
+        setSourceControlChanges((sc) => {
+          const next = new Map(sc);
+          nonConflicting.forEach((item) => next.set(item.path, 'added'));
+          return next;
+        });
+
+        if (nonConflicting[0]) {
+          openFileInTab(nonConflicting[0].path, nonConflicting[0].name, nonConflicting[0].content);
+        }
+
+        showToast(`Imported folder "${rootName}" (${fileEntries.length} files)`, 'success');
+      }
+    } catch (err: any) {
+      console.error('Error opening folder:', err);
+      showToast(err.message || 'Failed to open folder', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSave = () => {
@@ -942,10 +1397,14 @@ export const App: React.FC = () => {
     fetchGitHubUser(token)
       .then((username) => {
         localStorage.setItem('github_pat', token);
+        localStorage.setItem('github_auth_type', 'pat');
+        localStorage.setItem('github_token_timestamp', Date.now().toString());
         setGithubToken(token);
         setGithubUser(username);
+        setAuthType('pat');
+        setIsOAuthExpired(false);
         setShowGitHubModal(false);
-        showToast(`Authenticated as ${username}`, 'success');
+        showToast(`Authenticated as ${username} (PAT)`, 'success');
         loadUserRepositories(token, username, true);
       })
       .catch((err) => {
@@ -956,8 +1415,12 @@ export const App: React.FC = () => {
 
   const handleClearGitHubToken = () => {
     localStorage.removeItem('github_pat');
+    localStorage.removeItem('github_auth_type');
+    localStorage.removeItem('github_token_timestamp');
     setGithubToken(null);
     setGithubUser(null);
+    setAuthType(null);
+    setIsOAuthExpired(false);
     setRepositories([]);
     showToast('Logged out from GitHub', 'info');
   };
@@ -1191,19 +1654,6 @@ export const App: React.FC = () => {
     });
     setStagedChanges(new Map());
   };
-
-  // Helper to find file node recursively
-  const findNodeByPath = useCallback((node: FileNode | null, targetPath: string): FileNode | null => {
-    if (!node) return null;
-    if (node.path === targetPath) return node;
-    if (node.children) {
-      for (const child of Object.values(node.children)) {
-        const found = findNodeByPath(child, targetPath);
-        if (found) return found;
-      }
-    }
-    return null;
-  }, []);
 
   // Helper to remove node from tree
   const removeNodeFromTree = (root: FileNode, targetPath: string): FileNode | null => {
@@ -1864,10 +2314,49 @@ export const App: React.FC = () => {
     setShowCommitPromptModal(true);
   };
 
+  // Core Push Execution Helper
+  const executeCommitPush = async (
+    filesToPush: CommitFilePayload[],
+    deletedPathsList: string[],
+    finalCommitMsg: string
+  ) => {
+    if (!repoInfo || !githubToken) return;
+
+    try {
+      setIsLoading(true);
+      setLoadingMessage(`Pushing ${filesToPush.length} files to ${repoInfo.owner}/${repoInfo.repo} (${currentBranch})...`);
+
+      const result = await commitMultipleFilesToGitHub(
+        repoInfo.owner,
+        repoInfo.repo,
+        currentBranch,
+        filesToPush,
+        deletedPathsList,
+        finalCommitMsg,
+        githubToken
+      );
+
+      // Reset modified state
+      setTabs((prev) => prev.map((t) => ({ ...t, isModified: false })));
+      setStagedChanges(new Map());
+      setSourceControlChanges(new Map());
+      setDeletedFiles(new Set());
+      setCommitMessage('');
+
+      showToast(`Successfully committed & pushed ${result.fileCount} files to GitHub (${repoInfo.owner}/${repoInfo.repo})!`, 'success');
+      loadCommitHistory();
+    } catch (err: any) {
+      console.error('Commit & Push failed:', err);
+      showToast(`Commit & Push failed: ${err.message || err}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const confirmCommitPush = async () => {
     setShowCommitPromptModal(false);
     setIsLoading(true);
-    setLoadingMessage(`Preparing all project files for GitHub commit...`);
+    setLoadingMessage(`Scanning project files for secrets & preparing commit...`);
 
     try {
       // Determine root folder prefix to strip so files sit cleanly at repository root
@@ -1903,33 +2392,46 @@ export const App: React.FC = () => {
       const autoMsg = `Update project (${allFiles.length} files) - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       const finalCommitMsg = commitMessage.trim() || autoMsg;
 
-      setLoadingMessage(`Pushing ${allFiles.length} files to ${repoInfo.owner}/${repoInfo.repo} (${currentBranch})...`);
+      // SENSITIVE FILE SCAN BEFORE PUSH
+      const findings = scanFilesForSecrets(allFiles);
 
-      const result = await commitMultipleFilesToGitHub(
-        repoInfo.owner,
-        repoInfo.repo,
-        currentBranch,
-        allFiles,
-        deletedPathsList,
-        finalCommitMsg,
-        githubToken
-      );
+      if (findings.length > 0) {
+        // Sensitive files or secrets detected! Halt push and ask for confirmation
+        setIsLoading(false);
+        setSensitiveFindings(findings);
+        setPendingCommitFiles(allFiles);
+        setPendingDeletedPaths(deletedPathsList);
+        setPendingCommitMsg(finalCommitMsg);
+        setShowSensitiveModal(true);
+        return;
+      }
 
-      // Reset modified state
-      setTabs((prev) => prev.map((t) => ({ ...t, isModified: false })));
-      setStagedChanges(new Map());
-      setSourceControlChanges(new Map());
-      setDeletedFiles(new Set());
-      setCommitMessage('');
-
-      showToast(`Successfully committed & pushed ${result.fileCount} files to GitHub (${repoInfo.owner}/${repoInfo.repo})!`, 'success');
-      loadCommitHistory();
+      // No sensitive files found, proceed directly with commit & push
+      await executeCommitPush(allFiles, deletedPathsList, finalCommitMsg);
     } catch (err: any) {
-      console.error('Commit & Push failed:', err);
-      showToast(`Commit & Push failed: ${err.message || err}`, 'error');
-    } finally {
+      console.error('Commit & Push preparation failed:', err);
+      showToast(`Commit preparation failed: ${err.message || err}`, 'error');
       setIsLoading(false);
     }
+  };
+
+  // Sensitive Scan Confirmation Handlers
+  const handleProceedPushAnyway = async () => {
+    setShowSensitiveModal(false);
+    await executeCommitPush(pendingCommitFiles, pendingDeletedPaths, pendingCommitMsg);
+  };
+
+  const handleExcludeAndPush = async (excludedPaths: string[]) => {
+    setShowSensitiveModal(false);
+    const excludedSet = new Set(excludedPaths);
+    const safeFiles = pendingCommitFiles.filter((f) => !excludedSet.has(f.path));
+
+    if (safeFiles.length === 0 && pendingDeletedPaths.length === 0) {
+      showToast('All files were excluded. Nothing left to commit.', 'info');
+      return;
+    }
+
+    await executeCommitPush(safeFiles, pendingDeletedPaths, pendingCommitMsg);
   };
 
   const handlePullChanges = async () => {
@@ -1938,6 +2440,93 @@ export const App: React.FC = () => {
       return;
     }
     handleCloneRepo(`${repoInfo.owner}/${repoInfo.repo}`, currentBranch);
+  };
+
+  // Export Entire Workspace as Clean ZIP Archive
+  const handleExportWorkspaceZip = async () => {
+    if (!fileStructure && tabs.length === 0) {
+      showToast('No workspace files to export', 'info');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setLoadingMessage('Packaging entire workspace into ZIP archive...');
+      const zip = new JSZip();
+
+      let rootPrefix = '';
+      if (fileStructure && fileStructure.type === 'folder' && fileStructure.name) {
+        rootPrefix = fileStructure.path + '/';
+      }
+
+      const allFiles = await collectAllWorkspaceFiles(fileStructure, tabs, rootPrefix);
+
+      if (allFiles.length === 0) {
+        showToast('No files found to export', 'info');
+        setIsLoading(false);
+        return;
+      }
+
+      for (const file of allFiles) {
+        if (file.encoding === 'base64') {
+          zip.file(file.path, file.content || '', { base64: true });
+        } else {
+          zip.file(file.path, file.content || '');
+        }
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const archiveName = `${repoInfo?.repo || fileStructure?.name || 'pushflow-workspace'}-${dateStr}.zip`;
+      link.href = url;
+      link.download = archiveName;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${allFiles.length} files as "${archiveName}"`, 'success');
+    } catch (err: any) {
+      console.error('ZIP export error:', err);
+      showToast(`Failed to export ZIP: ${err.message || err}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Generate & Save .gitignore to Workspace
+  const handleApplyGitignore = (content: string) => {
+    const gitignorePath = fileStructure ? `${fileStructure.path}/.gitignore` : '.gitignore';
+
+    setFileStructure((prev) => {
+      if (!prev) {
+        return {
+          name: 'workspace',
+          path: 'workspace',
+          type: 'folder',
+          children: {
+            '.gitignore': {
+              name: '.gitignore',
+              path: 'workspace/.gitignore',
+              type: 'file',
+              content,
+            },
+          },
+        };
+      }
+      return insertFileIntoTree(prev, gitignorePath, content);
+    });
+
+    openFileInTab(gitignorePath, '.gitignore', content);
+
+    setSourceControlChanges((sc) => {
+      const next = new Map(sc);
+      next.set(gitignorePath, 'modified');
+      return next;
+    });
+
+    setShowGitignoreModal(false);
+    showToast('Generated .gitignore successfully', 'success');
   };
 
   // Keyboard Shortcuts
@@ -2011,7 +2600,43 @@ export const App: React.FC = () => {
         totalChangedCount={stagedChanges.size + sourceControlChanges.size}
         onStageAll={handleStageAll}
         onUnstageAll={handleUnstageAll}
+        isOAuthExpired={isOAuthExpired}
+        authType={authType}
+        onReconnectOAuth={handleGitHubOAuth}
+        onOpenLivePreview={() => setShowLivePreviewModal(true)}
+        onOpenGitignoreModal={() => setShowGitignoreModal(true)}
+        onExportWorkspaceZip={handleExportWorkspaceZip}
       />
+
+      {/* OAuth Session Expiration Alert Banner */}
+      {isOAuthExpired && (
+        <div className="bg-amber-950/95 border-b border-amber-600/70 text-amber-200 px-4 py-2 flex items-center justify-between text-xs shadow-md z-30 shrink-0 animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <i className="fas fa-exclamation-triangle text-amber-400 text-sm animate-pulse"></i>
+            <div>
+              <span className="font-semibold text-amber-300">GitHub OAuth Session Expired:</span>{' '}
+              <span className="text-amber-100/90">
+                Your GitHub session has expired due to inactivity. Reconnect to resume accessing repositories and syncing changes (your open files and modifications are preserved).
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-3 shrink-0">
+            <button
+              onClick={handleGitHubOAuth}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-medium px-3 py-1 rounded text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+            >
+              <i className="fas fa-rotate"></i> Reconnect GitHub OAuth
+            </button>
+            <button
+              onClick={() => setIsOAuthExpired(false)}
+              className="text-amber-300 hover:text-white px-1.5 py-0.5 text-sm cursor-pointer"
+              title="Dismiss banner"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area (Sidebar + Editor) */}
       <div className="main-content flex flex-1 h-full overflow-hidden relative min-w-0">
@@ -2064,6 +2689,8 @@ export const App: React.FC = () => {
           onOpenRepoBrowser={() => setShowRepoBrowserModal(true)}
           onCloneRepo={handleCloneRepo}
           onBackToRepos={handleBackToRepos}
+          isOAuthExpired={isOAuthExpired}
+          onReconnectOAuth={handleGitHubOAuth}
         />
 
         <EditorArea
@@ -2175,6 +2802,8 @@ export const App: React.FC = () => {
         onGitHubOAuth={handleGitHubOAuth}
         firebaseUser={firebaseUser}
         onLogoutFirebase={handleLogoutFirebase}
+        isOAuthExpired={isOAuthExpired}
+        authType={authType}
         showCloneModal={showCloneModal}
         onCloseCloneModal={() => setShowCloneModal(false)}
         onCloneRepo={handleCloneRepo}
@@ -2194,6 +2823,47 @@ export const App: React.FC = () => {
         fileOpModal={fileOpModal}
         onCloseFileOpModal={() => setFileOpModal((prev) => ({ ...prev, isOpen: false }))}
         onConfirmFileOp={handleConfirmFileOp}
+      />
+
+      {/* Existing File Rewrite & Collision Resolution Modal */}
+      <FileConflictModal
+        modalState={conflictModalState}
+        onClose={() => setConflictModalState((prev) => ({ ...prev, isOpen: false, conflicts: [] }))}
+        onConfirm={handleResolveConflicts}
+      />
+
+      {/* Sensitive File & Secret Detection Confirmation Modal */}
+      <SensitiveScanModal
+        isOpen={showSensitiveModal}
+        findings={sensitiveFindings}
+        totalFileCount={pendingCommitFiles.length}
+        onCancel={() => {
+          setShowSensitiveModal(false);
+          showToast('Push cancelled to review sensitive files', 'info');
+        }}
+        onProceedAnyway={handleProceedPushAnyway}
+        onExcludeAndPush={handleExcludeAndPush}
+      />
+
+      {/* Live In-Browser Preview & Code Runner Modal */}
+      <LivePreviewModal
+        isOpen={showLivePreviewModal}
+        onClose={() => setShowLivePreviewModal(false)}
+        fileStructure={fileStructure}
+        tabs={tabs}
+        activeTabId={activeTabId}
+      />
+
+      {/* Automated .gitignore Generator Modal */}
+      <GitignoreGeneratorModal
+        isOpen={showGitignoreModal}
+        fileStructure={fileStructure}
+        existingGitignoreContent={
+          findNodeByPath(fileStructure, fileStructure ? `${fileStructure.path}/.gitignore` : '.gitignore')?.content ||
+          tabs.find((t) => t.path.endsWith('.gitignore'))?.content
+        }
+        onClose={() => setShowGitignoreModal(false)}
+        onApply={handleApplyGitignore}
       />
 
       <CommandPalette 

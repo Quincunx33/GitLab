@@ -29,6 +29,12 @@ interface ToolbarProps {
   onStageAll?: () => void;
   onUnstageAll?: () => void;
   hasActiveFile?: boolean;
+  isOAuthExpired?: boolean;
+  authType?: 'oauth' | 'pat' | null;
+  onReconnectOAuth?: () => void;
+  onOpenLivePreview?: () => void;
+  onOpenGitignoreModal?: () => void;
+  onExportWorkspaceZip?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -58,6 +64,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onStageAll,
   onUnstageAll,
   hasActiveFile = false,
+  isOAuthExpired = false,
+  authType = null,
+  onReconnectOAuth,
+  onOpenLivePreview,
+  onOpenGitignoreModal,
+  onExportWorkspaceZip,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -149,10 +161,46 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           id="saveAs"
           onClick={onSaveAs}
           className="hover:bg-[#3d3d3d] px-2 py-1 rounded flex items-center gap-1 transition-colors"
-          title="Save As / Export"
+          title="Save As / Export Active File"
         >
           <i className="fas fa-download"></i> Save As
         </button>
+
+        {onOpenLivePreview && (
+          <button
+            id="livePreviewBtn"
+            onClick={onOpenLivePreview}
+            className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 hover:text-white px-2 py-1 rounded flex items-center gap-1.5 transition-colors font-medium shadow-2xs"
+            title="Launch In-Browser Code Runner & Live Preview"
+          >
+            <i className="fas fa-play text-emerald-400 text-xs"></i>
+            <span>Preview</span>
+          </button>
+        )}
+
+        {onExportWorkspaceZip && (
+          <button
+            id="exportZipBtn"
+            onClick={onExportWorkspaceZip}
+            className="hover:bg-[#3d3d3d] px-2 py-1 rounded flex items-center gap-1.5 transition-colors text-[#ccc] hover:text-white"
+            title="Download entire workspace as a clean ZIP archive"
+          >
+            <i className="fas fa-file-zipper text-sky-400 text-xs"></i>
+            <span>Export ZIP</span>
+          </button>
+        )}
+
+        {onOpenGitignoreModal && (
+          <button
+            id="gitignoreModalBtn"
+            onClick={onOpenGitignoreModal}
+            className="hover:bg-[#3d3d3d] px-2 py-1 rounded flex items-center gap-1.5 transition-colors text-[#ccc] hover:text-white"
+            title="Auto-detect project stack & generate .gitignore"
+          >
+            <i className="fas fa-shield-halved text-amber-400 text-xs"></i>
+            <span>.gitignore</span>
+          </button>
+        )}
 
         {onCompareActiveFile && hasActiveFile && (
           <button
@@ -221,16 +269,34 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* GitHub Operations */}
       <div className="github-operations flex items-center gap-1.5 shrink-0 border-l border-[#3d3d3d] pl-2 ml-auto">
-        <button
-          id="githubLogin"
-          onClick={onShowGitHubLogin}
-          className={`px-2.5 py-1 rounded border border-[#3d3d3d] flex items-center gap-1.5 transition-colors ${
-            githubToken ? 'bg-[#0066b8] text-white' : 'bg-[#2d2d2d] hover:bg-[#3d3d3d]'
-          }`}
-        >
-          <i className="fab fa-github"></i>
-          <span>{githubUser ? githubUser : 'GitHub Login'}</span>
-        </button>
+        {isOAuthExpired ? (
+          <button
+            id="githubLogin"
+            onClick={onReconnectOAuth || onShowGitHubLogin}
+            className="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded border border-amber-400 flex items-center gap-1.5 transition-colors animate-pulse"
+            title="GitHub OAuth session expired! Click to reconnect"
+          >
+            <i className="fas fa-exclamation-triangle text-amber-200"></i>
+            <span>Reconnect OAuth</span>
+          </button>
+        ) : (
+          <button
+            id="githubLogin"
+            onClick={onShowGitHubLogin}
+            className={`px-2.5 py-1 rounded border border-[#3d3d3d] flex items-center gap-1.5 transition-colors ${
+              githubToken ? 'bg-[#0066b8] text-white' : 'bg-[#2d2d2d] hover:bg-[#3d3d3d]'
+            }`}
+            title={authType === 'oauth' ? 'Connected via GitHub OAuth' : authType === 'pat' ? 'Connected via GitHub PAT' : 'GitHub Account'}
+          >
+            <i className="fab fa-github"></i>
+            <span>{githubUser ? githubUser : 'GitHub Login'}</span>
+            {authType === 'oauth' && githubToken && (
+              <span className="text-[9px] bg-sky-900/90 text-sky-200 border border-sky-400/40 px-1 py-0.2 rounded uppercase font-semibold">
+                OAuth
+              </span>
+            )}
+          </button>
+        )}
 
         {onShowRepoBrowser && (
           <button
